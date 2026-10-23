@@ -1,0 +1,33 @@
+# Pushing a tag v* builds every platform and publishes a GitHub Release with
+# the archives, SHA256SUMS and a signed build provenance attestation.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write     # create the release
+  id-token: write     # sign the attestation
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: ./scripts/dist.sh "$GITHUB_REF_NAME"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/k2c_*
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "k2c $GITHUB_REF_NAME" --generate-notes --verify-tag
